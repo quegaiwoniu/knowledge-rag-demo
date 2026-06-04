@@ -1,0 +1,25 @@
+spring:
+  application:
+    name: knowledge-rag-demo
+  ai:
+    model:
+      chat: openai
+    openai:
+      base-url: https://api.zetatechs.com
+      api-key: sk-1wjIvqnko27W0jfiWT90Ubov1O4vpjJ3SYZOF8yZ9tf5R0iD
+      chat:
+        # Replace with the actual model name exposed by your provider.
+        options:
+          model: gpt-4.1-mini
+
+server:
+  port: 8080
+
+app:
+  ai:
+    provider: zetatechs-openai-compatible
+    default-message: Hello from knowledge-rag-demo
+    summary-max-input-length: 1200
+    use-stub-service: false
+
+kind: Application

@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: knowledge-rag-demo
+  ai:
+    model:
+      chat: none
+    openai:
+      api-key: test-key
+
+app:
+  ai:
+    provider: zetatechs-openai-compatible
+    default-message: Hello from test
+    summary-max-input-length: 1200
+    use-stub-service: true
