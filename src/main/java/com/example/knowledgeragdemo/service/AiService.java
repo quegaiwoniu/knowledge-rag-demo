@@ -1,6 +1,7 @@
 package com.example.knowledgeragdemo.service;
 
 import com.example.knowledgeragdemo.dto.AiPingResponse;
+import com.example.knowledgeragdemo.dto.ClassifyResponse;
 import com.example.knowledgeragdemo.dto.SummaryResponse;
 
 /**
@@ -22,4 +23,9 @@ public interface AiService {
      * 对输入文本生成摘要，并返回结构化结果。
      */
     SummaryResponse summarize(String text);
+
+    /**
+     * 对输入文本执行固定枚举分类，并返回结构化结果。
+     */
+    ClassifyResponse classify(String text);
 }

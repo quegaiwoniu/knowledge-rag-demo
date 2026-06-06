@@ -2,6 +2,8 @@ package com.example.knowledgeragdemo.service;
 
 import com.example.knowledgeragdemo.config.AppAiProperties;
 import com.example.knowledgeragdemo.dto.AiPingResponse;
+import com.example.knowledgeragdemo.dto.ClassificationCategory;
+import com.example.knowledgeragdemo.dto.ClassifyResponse;
 import com.example.knowledgeragdemo.dto.SummaryResponse;
 
 /**
@@ -37,5 +39,57 @@ public class StubAiService implements AiService {
                 ? normalized.substring(0, SUMMARY_PREVIEW_LENGTH) + "..."
                 : normalized;
         return new SummaryResponse(summary, text.length(), truncated);
+    }
+
+    @Override
+    public ClassifyResponse classify(String text) {
+        String normalized = text == null ? "" : text.trim().toLowerCase();
+        ClassificationCategory category = resolveCategory(normalized);
+        return new ClassifyResponse(category, category.getDescription());
+    }
+
+    /**
+     * 使用固定关键字规则做分类，保证测试输出稳定。
+     */
+    private ClassificationCategory resolveCategory(String normalized) {
+        if (containsAny(normalized,
+                "\u62a5\u9519",
+                "\u5f02\u5e38",
+                "\u5931\u8d25",
+                "bug",
+                "error",
+                "\u65e0\u6cd5",
+                "\u95ea\u9000")) {
+            return ClassificationCategory.BUG;
+        }
+        if (containsAny(normalized,
+                "\u5efa\u8bae",
+                "\u5e0c\u671b",
+                "\u65b0\u589e",
+                "\u589e\u52a0",
+                "\u652f\u6301",
+                "\u4f18\u5316")) {
+            return ClassificationCategory.FEATURE;
+        }
+        if (containsAny(normalized,
+                "\u6295\u8bc9",
+                "\u4e0d\u6ee1",
+                "\u592a\u5dee",
+                "\u592a\u6162",
+                "\u751f\u6c14",
+                "\u7cdf\u7cd5",
+                "\u62b1\u6028")) {
+            return ClassificationCategory.COMPLAINT;
+        }
+        return ClassificationCategory.QUESTION;
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
