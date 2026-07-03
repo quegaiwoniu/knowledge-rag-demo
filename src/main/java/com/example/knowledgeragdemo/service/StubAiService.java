@@ -4,15 +4,14 @@ import com.example.knowledgeragdemo.config.AppAiProperties;
 import com.example.knowledgeragdemo.dto.AiPingResponse;
 import com.example.knowledgeragdemo.dto.ClassificationCategory;
 import com.example.knowledgeragdemo.dto.ClassifyResponse;
+import com.example.knowledgeragdemo.dto.ExtractResponse;
+import com.example.knowledgeragdemo.dto.ExtractionPriority;
 import com.example.knowledgeragdemo.dto.SummaryResponse;
+
+import java.util.List;
 
 /**
  * 测试和本地兜底使用的 stub AI 实现。
- *
- * <p>这个类保留的原因有三个：
- * 1. 单测不依赖外部模型供应商
- * 2. 前后端联调时可以得到稳定结果
- * 3. 真实模型调用出问题时，仍然有一个容易排查的对照实现</p>
  */
 public class StubAiService implements AiService {
 
@@ -48,37 +47,58 @@ public class StubAiService implements AiService {
         return new ClassifyResponse(category, category.getDescription());
     }
 
-    /**
-     * 使用固定关键字规则做分类，保证测试输出稳定。
-     */
+    @Override
+    public ExtractResponse extract(String text) {
+        String normalized = text == null ? "" : text.trim().replaceAll("\\s+", " ").toLowerCase();
+        ClassificationCategory category = resolveCategory(normalized);
+        ExtractionPriority priority = containsAny(normalized,
+                "优先",
+                "紧急",
+                "立即",
+                "失败",
+                "异常") ? ExtractionPriority.HIGH : ExtractionPriority.MEDIUM;
+
+        List<String> keywords = containsAny(normalized, "支付", "订单")
+                ? List.of("支付接口", "订单提交", "超时日志")
+                : List.of("结构化抽取", "接口设计", "学习项目");
+        String title = category == ClassificationCategory.BUG ? "订单提交失败排查" : "结构化信息提取";
+
+        return new ExtractResponse(
+                title,
+                category,
+                priority,
+                keywords
+        );
+    }
+
     private ClassificationCategory resolveCategory(String normalized) {
         if (containsAny(normalized,
-                "\u62a5\u9519",
-                "\u5f02\u5e38",
-                "\u5931\u8d25",
+                "报错",
+                "异常",
+                "失败",
                 "bug",
                 "error",
-                "\u65e0\u6cd5",
-                "\u95ea\u9000")) {
+                "无法",
+                "闪退")) {
             return ClassificationCategory.BUG;
         }
         if (containsAny(normalized,
-                "\u5efa\u8bae",
-                "\u5e0c\u671b",
-                "\u65b0\u589e",
-                "\u589e\u52a0",
-                "\u652f\u6301",
-                "\u4f18\u5316")) {
+                "建议",
+                "希望",
+                "新增",
+                "增加",
+                "支持",
+                "优化")) {
             return ClassificationCategory.FEATURE;
         }
         if (containsAny(normalized,
-                "\u6295\u8bc9",
-                "\u4e0d\u6ee1",
-                "\u592a\u5dee",
-                "\u592a\u6162",
-                "\u751f\u6c14",
-                "\u7cdf\u7cd5",
-                "\u62b1\u6028")) {
+                "投诉",
+                "不满",
+                "太差",
+                "太慢",
+                "生气",
+                "糟糕",
+                "抱怨")) {
             return ClassificationCategory.COMPLAINT;
         }
         return ClassificationCategory.QUESTION;
