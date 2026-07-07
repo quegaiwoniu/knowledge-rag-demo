@@ -100,7 +100,7 @@ spring:
       chat: openai
     openai:
       base-url: https://api.zetatechs.com
-      api-key: your-real-api-key
+      api-key: ${OPENAI_API_KEY:}
       chat:
         options:
           model: gpt-4.1-mini
@@ -115,6 +115,7 @@ app:
 
 说明：
 - `use-stub-service: false` 表示运行时走真实模型
+- 真实密钥不要写进 `application.yml`，请通过环境变量 `OPENAI_API_KEY` 注入
 - 测试目录下有单独的 `src/test/resources/application.yml`，用于让自动化测试稳定运行
 
 ## 本地启动

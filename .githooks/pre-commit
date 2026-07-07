@@ -1,0 +1,30 @@
+#!/bin/sh
+
+# 在提交前检查 staged 内容里是否包含常见明文 secret。
+# 目标不是做完美扫描，而是优先拦截最容易误提交的情况。
+
+set -eu
+
+PATTERN='(sk-[A-Za-z0-9_-]{20,}|api-key[[:space:]]*:[[:space:]]*sk-[A-Za-z0-9_-]+|OPENAI_API_KEY[[:space:]]*=[[:space:]]*sk-[A-Za-z0-9_-]+)'
+
+git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r file
+do
+  [ -n "$file" ] || continue
+
+  # 跳过删除文件和取不出 staged 内容的情况。
+  if ! git cat-file -e ":$file" 2>/dev/null; then
+    continue
+  fi
+
+  # 直接检查 staged 版本的文件内容，避免工作区和暂存区不一致。
+  if git show ":$file" | grep -E -n "$PATTERN" >/tmp/codex-secret-check.txt 2>/dev/null; then
+    echo "Commit blocked: possible secret detected in staged file: $file"
+    cat /tmp/codex-secret-check.txt
+    echo "Please move the secret to environment variables or local-only config before committing."
+    rm -f /tmp/codex-secret-check.txt
+    exit 1
+  fi
+done
+
+rm -f /tmp/codex-secret-check.txt
+exit 0

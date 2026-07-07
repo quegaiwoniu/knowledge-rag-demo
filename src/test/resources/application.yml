@@ -13,3 +13,5 @@ app:
     default-message: Hello from test
     summary-max-input-length: 1200
     use-stub-service: true
+  weather:
+    use-mock-provider: true

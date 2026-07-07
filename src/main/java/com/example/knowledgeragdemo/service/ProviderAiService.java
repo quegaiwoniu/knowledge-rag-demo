@@ -8,23 +8,23 @@ import com.example.knowledgeragdemo.dto.ExtractResponse;
 import com.example.knowledgeragdemo.dto.ExtractResult;
 import com.example.knowledgeragdemo.dto.ExtractionPriority;
 import com.example.knowledgeragdemo.dto.SummaryResponse;
+import com.example.knowledgeragdemo.dto.ToolCallResponse;
 import org.springframework.ai.chat.client.ChatClient;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
-/**
- * 基于 Spring AI ChatClient 的真实模型实现。
- */
 public class ProviderAiService implements AiService {
 
     private final ChatClient chatClient;
     private final AppAiProperties properties;
+    private final WeatherToolService weatherToolService;
 
-    public ProviderAiService(ChatClient chatClient, AppAiProperties properties) {
+    public ProviderAiService(ChatClient chatClient, AppAiProperties properties, WeatherToolService weatherToolService) {
         this.chatClient = chatClient;
         this.properties = properties;
+        this.weatherToolService = weatherToolService;
     }
 
     @Override
@@ -70,7 +70,7 @@ public class ProviderAiService implements AiService {
         String rawCategory = chatClient.prompt()
                 .system("""
                         你是一个企业应用里的文本分类助手。
-                        你只能够从以下四个分类中选择一个：
+                        你只能从以下四个分类中选择一个：
                         bug
                         feature
                         question
@@ -100,7 +100,6 @@ public class ProviderAiService implements AiService {
                 .system("""
                         你是企业应用中的文本结构化抽取助手。
                         你的任务是把用户输入提炼成固定结构，供后端系统直接消费。
-
                         请严格遵守以下规则：
                         1. title 是 1-20 字的简短中文标题
                         2. category 只能是 bug、feature、question、complaint 之一
@@ -126,6 +125,28 @@ public class ProviderAiService implements AiService {
         return new ExtractResponse(title, category, priority, keywords);
     }
 
+    @Override
+    public ToolCallResponse toolCall(String question) {
+        weatherToolService.clearLastToolResult();
+
+        String answer = chatClient.prompt()
+                .system("""
+                        你是企业应用中的天气查询助手。
+                        当用户的问题是在询问某个城市当前天气、温度、下雨情况或体感情况时，你必须优先调用 getWeather 工具。
+                        规则：
+                        1. 如果用户在问天气，必须调用工具，不要凭空回答
+                        2. 如果用户没有明确城市，请默认查询北京
+                        3. 回答要简洁自然，使用中文
+                        4. 如果用户不是在问天气，不要调用工具，直接说明当前接口主要演示天气工具调用
+                        """)
+                .user(question)
+                .tools(weatherToolService)
+                .call()
+                .content();
+
+        return weatherToolService.buildToolResponse(answer);
+    }
+
     private ClassificationCategory parseCategory(String rawCategory, String originalText) {
         ClassificationCategory category = parseExtractCategory(rawCategory);
         return applyCategoryOverride(category, originalText);
@@ -145,16 +166,7 @@ public class ProviderAiService implements AiService {
     private ClassificationCategory applyCategoryOverride(ClassificationCategory category, String originalText) {
         String normalizedText = originalText == null ? "" : originalText.toLowerCase(Locale.ROOT);
         if (category == ClassificationCategory.COMPLAINT
-                && containsAny(normalizedText,
-                "报错",
-                "异常",
-                "失败",
-                "无法",
-                "错误",
-                "空指针",
-                "nullpointer",
-                "error",
-                "bug")) {
+                && containsAny(normalizedText, "报错", "异常", "失败", "无法", "错误", "空指针", "nullpointer", "error", "bug")) {
             return ClassificationCategory.BUG;
         }
         return category;
@@ -172,7 +184,7 @@ public class ProviderAiService implements AiService {
 
     private String normalizeTitle(String title) {
         String normalized = title == null ? "" : title.trim().replaceAll("\\s+", " ");
-        normalized = normalized.replaceAll("[。！？,.!?，]+$", "");
+        normalized = normalized.replaceAll("[。！？,.!?；;]+$", "");
         if (normalized.isBlank()) {
             throw new IllegalStateException("invalid extract title: blank after normalization");
         }
