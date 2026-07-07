@@ -118,6 +118,45 @@ app:
 - 真实密钥不要写进 `application.yml`，请通过环境变量 `OPENAI_API_KEY` 注入
 - 测试目录下有单独的 `src/test/resources/application.yml`，用于让自动化测试稳定运行
 
+### 在 IDEA 里配置 `OPENAI_API_KEY`
+
+推荐直接在 IDEA 的 Spring Boot 启动配置里加环境变量，这样最适合本地开发，也不会把密钥写进仓库。
+
+操作步骤：
+
+1. 打开 IDEA 顶部菜单：`Run -> Edit Configurations...`
+2. 选中你的后端 Spring Boot 启动项
+3. 找到 `Environment variables`
+4. 点击右侧编辑按钮，新增一条：
+
+```text
+OPENAI_API_KEY=你的真实key
+```
+
+5. 保存配置后，再从 IDEA 启动后端
+
+补充说明：
+
+- 现在项目里的配置是：
+
+```yaml
+spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+```
+
+- 这表示程序启动时会优先读取环境变量 `OPENAI_API_KEY`
+- 如果这个变量没配，程序就拿不到真实 key
+- 不要把真实 key 再写回 `application.yml`
+
+如果你只是临时想在命令行里启动，也可以用 PowerShell 这样写：
+
+```powershell
+$env:OPENAI_API_KEY="你的真实key"
+mvn -s .mvn/settings.xml spring-boot:run
+```
+
 ## 本地启动
 
 ### 1. 运行测试
