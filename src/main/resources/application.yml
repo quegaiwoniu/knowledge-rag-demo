@@ -26,5 +26,7 @@ app:
     use-mock-provider: true
     geocoding-base-url: https://geocoding-api.open-meteo.com/v1/search
     forecast-base-url: https://api.open-meteo.com/v1/forecast
+  rag:
+    sample-docs-path: docs/sample-docs
 
 kind: Application

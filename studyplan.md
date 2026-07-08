@@ -331,104 +331,345 @@ Codex 不是替你完成学习，而是替你节省样板代码、重构和测�
 
 ## 第 2 周：RAG 项目
 
-目标：完成一个可演示、可测试的企业知识库问答系统，并补最小前端页面。
+目标：完成一个更接近企业真实场景的知识库问答系统，而不是只做一个“能聊天”的 demo。
 
-### Day 8：准备语料
+本周核心学习价值：
+
+- 文档可追溯：每个答案都能追到原始文档、章节和 chunk
+- 切片可解释：能看懂为什么这样切、哪里可能切坏
+- 检索可调试：能通过 `/rag/search` 判断问题出在召回还是生成
+- 回答有引用：citation 必须来自检索结果，不能让模型凭空编来源
+- 资料不足会拒答：没有足够上下文时明确拒答，而不是硬编
+- 评测可复现：用固定问题集持续观察 RAG 质量
+
+本周最终闭环：
+
+```text
+sample docs -> ingestion -> chunking -> embedding -> retrieval -> answer -> citations -> evaluation
+```
+
+### Day 8：企业语料与评测集设计
+
+价值点：
+
+- 企业 RAG 的质量从语料开始，不是从模型开始
+- 语料如果太散、太假、太短，后面检索和问答都学不到真实问题
+- 先设计评测问题，可以避免后面只为了接口 200 而写代码
+
+建议业务域：
+
+- 优先选择一个固定领域，例如“订单与支付排障”
+- 这个领域后续还能复用到 Agent / 工单分析项目里，学习收益更高
 
 任务：
 
-- 收集 10-20 篇同一领域文档
-- 优先选择自己熟悉的企业内容
+- 准备 10-15 篇同一领域 Markdown 文档
+- 准备 15-20 条候选问题
+- 把问题分成四类：
+  - 直接命中
+  - 近义表达
+  - 资料中没有答案
+  - 容易混淆的问题
 
 建议文档类型：
 
 - FAQ
 - 排障手册
 - 接口说明
-- 产品说明
+- 配置说明
+- 已知问题 / 事故复盘
 
 产出：
 
 - `docs/sample-docs/`
-- 文档清单
-- 10 条候选问题
+- `docs/evaluation/rag-questions.md`
+- `docs/evaluation/rag-dataset.md`
 
-### Day 9：文档导入
+验收：
+
+- 文档属于同一个业务域
+- 每篇文档都有标题和清晰章节
+- 每个可回答问题都标记期望来源文档
+- 至少包含 3 条“应该拒答”的问题
+
+Codex 话术：
+
+```text
+我们现在进入 Week 2 RAG 项目，目标是做一个企业知识库问答系统。
+请帮我设计一组“订单与支付排障”领域的企业风格样例语料。
+要求：
+1. 规划 docs/sample-docs 目录下 10 篇 Markdown 文档
+2. 每篇文档要有标题、章节、具体事实、排障步骤和可引用内容
+3. 生成 15 条评测问题，分为直接命中、近义表达、无答案拒答、容易混淆四类
+4. 暂时不要写后端代码
+5. 输出文档清单、问题清单和每个问题的期望来源
+```
+
+复查话术：
+
+```text
+请从企业 RAG 的角度 review 这批样例语料。
+重点检查：
+1. 文档是否有明确的业务价值
+2. 内容是否能支撑 citation
+3. 问题集是否覆盖直接命中、近义表达、无答案和混淆问题
+4. 哪些文档太空泛或太相似
+请给出具体修改建议，不要泛泛而谈。
+```
+
+### Day 9：文档导入与元数据建模
 
 目标：
 
-- 完成 ingestion 基础流程
+- 完成 ingestion 基础流程，并建立企业 RAG 所需的可追溯 metadata
 
 任务：
 
-- 实现文件读取
-- 保存元数据：
+- 实现 Markdown 文件读取
+- 提取标题和基础内容
+- 保存文档级 metadata：
   - `docId`
   - `fileName`
-  - `chunkIndex`
   - `sourcePath`
+  - `title`
+  - `contentHash`
+  - `ingestedAt`
+- 增加导入结果统计
 
 验收：
 
 - 能批量读取文档
-- 元数据完整
+- 缺失文件有清晰错误
+- 重复文档可以通过 `contentHash` 识别
+- metadata 足够支撑后续 citation
 
-### Day 10：文档切片
+建议接口：
+
+```text
+POST /rag/ingest
+```
+
+Codex 话术：
+
+```text
+实现 Day 9 文档导入能力。
+要求：
+1. 在现有 Spring Boot 项目中新增 RAG ingestion service
+2. 从 docs/sample-docs 读取 Markdown 文件
+3. 保留 docId、fileName、sourcePath、title、contentHash、ingestedAt
+4. 新增 POST /rag/ingest
+5. 暂时不要实现 chunking 和 vector search
+6. 补充成功导入、文件不存在、重复 contentHash 的测试
+7. 沿用当前 controller/service/config/dto 分层风格
+```
+
+复查话术：
+
+```text
+请 review 文档导入实现。
+重点检查：
+1. metadata 是否足够支撑企业级可追溯
+2. 文件路径处理是否安全清晰
+3. 重复导入行为是否可解释
+4. 测试是否覆盖主要分支
+请先指出风险，再给修改建议。
+```
+
+### Day 10：文档切片与调试视图
 
 目标：
 
-- 实现 chunking
+- 实现 chunking，并让切片结果可检查、可解释
 
 任务：
 
 - 固定 chunk size
 - 增加 overlap
 - 保留原始元数据
+- 尽量保留章节标题
+- 增加 chunk 调试接口
 
 验收：
 
 - chunk 可追溯
 - 分片粒度合理
+- chunk 顺序稳定
+- 能直接查看每篇文档被切成了什么
 
-### Day 11：向量化与入库
+建议 chunk 字段：
+
+```text
+chunkId
+docId
+fileName
+sourcePath
+title
+sectionTitle
+chunkIndex
+content
+contentHash
+tokenEstimate
+```
+
+建议接口：
+
+```text
+GET /rag/chunks
+```
+
+Codex 话术：
+
+```text
+实现 Day 10 文档切片能力。
+要求：
+1. 将已导入的 Markdown 文档切成可追溯 chunks
+2. 保留 docId、fileName、sourcePath、title、sectionTitle、chunkIndex、content
+3. 使用简单可配置的 chunk size 和 overlap
+4. 增加 GET /rag/chunks 调试接口
+5. 暂时不要加入 embedding
+6. 添加测试验证 chunk metadata、chunk 顺序和空文档行为
+```
+
+复查话术：
+
+```text
+请从企业 RAG 角度 review chunking 实现。
+重点检查：
+1. chunk 是否能追溯回原文档和章节
+2. 分片是否容易破坏语义
+3. chunk size 和 overlap 是否容易解释
+4. GET /rag/chunks 是否足够用于排查召回问题
+```
+
+### Day 11：向量化、入库与索引重建
 
 目标：
 
-- 完成 embedding + vector store
+- 完成 embedding + vector store，并支持可重复重建索引
 
 任务：
 
 - 接入 embedding
 - 完成 chunk 入库
-- 抽离 ingestion pipeline
+- 抽离 ingestion / chunking / indexing pipeline
+- 增加索引重建能力
+- 增加索引状态查询
 
 验收：
 
 - 文档可重复导入
 - 检索前准备流程完整
+- 索引可从样例文档重建
+- 能看到文档数、chunk 数、向量化数量
+- embedding 供应商异常时有可读错误
 
-### Day 12：纯检索接口
+建议接口：
+
+```text
+POST /rag/index/rebuild
+GET /rag/index/status
+```
+
+建议状态字段：
+
+```text
+documentCount
+chunkCount
+embeddedChunkCount
+lastRebuildAt
+```
+
+Codex 话术：
+
+```text
+实现 Day 11 embedding 与向量索引重建能力。
+要求：
+1. 优先使用 Spring AI 已支持的 embedding / vector store 能力
+2. 新增索引重建接口，将样例文档重新导入、切片、向量化
+3. 新增索引状态接口，返回 documentCount、chunkCount、embeddedChunkCount、lastRebuildAt
+4. 密钥只能来自环境变量，不能写进配置文件
+5. 外部模型调用相关逻辑要便于测试隔离
+6. 添加不依赖真实模型调用的 orchestration 测试
+```
+
+复查话术：
+
+```text
+请 review 向量索引设计。
+重点检查：
+1. 索引是否可重建
+2. 状态是否足够调试
+3. 是否有隐藏的外网依赖假设
+4. 是否存在密钥泄漏风险
+5. 测试是否避开了真实模型调用的不稳定性
+```
+
+### Day 12：纯检索接口与召回调试
 
 目标：
 
-- 完成 `/rag/search`
+- 完成 `/rag/search`，把它做成 RAG 的调试窗口
 
 任务：
 
 - 输入 query
 - 返回 top-k chunks
 - 附带 source metadata
+- 返回 score
+- 返回 chunk 内容摘要
+- 处理空 query 和非法 topK
 
 验收：
 
 - 检索结果相关
 - source 信息完整
+- 每个 hit 都有 score
+- 每个 hit 都能追溯到 fileName、sectionTitle、chunkIndex
+- 至少手工验证 5 条评测问题
 
-### Day 13：问答接口
+建议响应字段：
+
+```text
+query
+topK
+hits[]
+score
+content
+fileName
+sourcePath
+sectionTitle
+chunkIndex
+```
+
+Codex 话术：
+
+```text
+实现 Day 12 纯检索接口 /rag/search。
+要求：
+1. 新增 POST /rag/search
+2. 请求包含 query 和 topK
+3. 返回带 score 的 chunk hits
+4. 每个 hit 必须包含 fileName、sourcePath、sectionTitle、chunkIndex、content snippet
+5. 暂时不要生成最终答案
+6. 增加 blank query、非法 topK、正常检索响应映射的测试
+```
+
+复查话术：
+
+```text
+请把 /rag/search 当成 RAG 调试接口来 review。
+重点检查：
+1. 开发者能否通过响应判断召回是否正确
+2. score 是否可见
+3. metadata 是否足够生成 citation
+4. 空结果行为是否清晰
+```
+
+### Day 13：带引用和拒答的问答接口
 
 目标：
 
-- 完成 `/rag/ask`
+- 完成 `/rag/ask`，并强制回答基于检索证据
 
 任务：
 
@@ -436,28 +677,73 @@ Codex 不是替你完成学习，而是替你节省样板代码、重构和测�
 - 构造回答 prompt
 - 返回答案和引用
 - 处理空检索结果
+- 返回 `enoughContext`
+- 返回 retrieved chunks 供调试
+- 明确禁止模型编造 citation
 
 验收：
 
 - 回答可用
 - 有 citation
 - 资料不足时明确拒答
+- citation 必须来自 retrieved chunks
+- answer 和 citations 分字段返回
+- 无上下文问题返回 `enoughContext=false`
 
-### Day 14：RAG 评测
+建议响应结构：
+
+```json
+{
+  "answer": "...",
+  "enoughContext": true,
+  "citations": [],
+  "retrievedChunks": []
+}
+```
+
+Codex 话术：
+
+```text
+实现 Day 13 RAG 问答接口 /rag/ask。
+要求：
+1. 复用 /rag/search 的检索逻辑
+2. 根据 retrieved chunks 构造 grounded prompt
+3. 返回 answer、enoughContext、citations、retrievedChunks
+4. 检索不到有效上下文时直接拒答，不要让模型猜
+5. citation 只能来自 retrieved chunks
+6. 添加 no-context refusal、citation construction、response mapping 的测试
+```
+
+复查话术：
+
+```text
+请从幻觉风险角度 review /rag/ask。
+重点检查：
+1. 模型是否可能引用未检索到的来源
+2. 无上下文时是否明确拒答
+3. answer 和 citations 是否清晰分离
+4. prompt 是否足够约束模型但不过度复杂
+```
+
+### Day 14：RAG 评测与最小前端联调
 
 任务：
 
 - 准备 15-20 条问题
 - 手工校验结果
 - 分类错误原因
+- 记录每个失败样例的原因
+- 联调前端最小 RAG 演示区
 
-同时补充前端第一版：
+前端第一版：
 
-- 创建 `knowledge-rag-demo-web`
-- 完成文档导入区
+- 复用现有 `knowledge-rag-demo-web`
+- 完成索引重建按钮
 - 完成问题输入区
 - 完成答案展示区
 - 完成引用来源区
+- 完成 retrieved chunks 预览区
+- 展示 `enoughContext`
 - 处理 loading / error / empty 状态
 
 至少区分以下错误类型：
@@ -467,6 +753,105 @@ Codex 不是替你完成学习，而是替你节省样板代码、重构和测�
 - 回答幻觉
 - 引用错误
 - 拒答失败
+
+产出：
+
+- `docs/evaluation/rag-results.md`
+- 前端可完成一次完整 RAG demo 流程
+
+验收：
+
+- 15-20 条评测问题完成手工记录
+- 每个失败样例都有原因分类
+- 页面能展示答案、引用、召回片段、上下文是否充足
+- 能解释一次回答为什么可信，或者为什么拒答
+
+Codex 话术：
+
+```text
+实现 Day 14 RAG 评测和最小前端联调。
+要求：
+1. 新增 docs/evaluation/rag-results.md 记录评测结果
+2. 扩展现有 React 工作台，而不是创建新前端项目
+3. 页面展示 answer、enoughContext、citations、retrievedChunks
+4. UI 保持企业调试面板风格，重点突出答案、引用和召回片段
+5. 不要过度实现文档上传，除非后端已经支持
+6. 完成后运行后端测试和前端 build
+```
+
+复查话术：
+
+```text
+请 review RAG 前端和评测结果。
+重点检查页面是否能让使用者看懂：
+1. 问了什么问题
+2. 生成了什么答案
+3. 哪些来源支撑答案
+4. 上下文是否充足
+5. 失败样例下一步该怎么改
+```
+
+### 第 2 周固定 Codex 协作节奏
+
+每天建议按这个顺序和 Codex 协作：
+
+1. 让 Codex 复述当天目标和验收标准
+2. 让 Codex 先检查现有代码结构，不要直接写代码
+3. 让 Codex 给最小实现计划
+4. 只实现当天闭环，不顺手扩张范围
+5. 跑 focused tests，再跑必要的回归测试
+6. 让 Codex 总结今天改了什么、你应该重点读哪些文件
+
+通用开工话术：
+
+```text
+我们正在做 knowledge-rag-demo 的第 2 周 RAG 项目。
+今天目标是 Day X：[当天目标]。
+请先检查当前后端和前端结构，再给出最小实现计划。
+优先考虑企业 RAG 的可追溯、引用、拒答、可调试和可测试。
+不要做无关重构。
+```
+
+通用实现话术：
+
+```text
+按刚才计划开始实现。
+要求：
+1. 只做今天 RAG 目标相关改动
+2. 关键代码加必要注释，方便我阅读
+3. 沿用现有 API 风格、DTO 风格和测试风格
+4. 不提交密钥和本地配置
+5. 先跑 focused tests，再按风险决定是否跑全量测试
+```
+
+通用 review 话术：
+
+```text
+请从企业 RAG 角度 review 今天的实现。
+优先找 bug、缺失测试、可追溯不足、幻觉风险、错误处理不清晰的问题。
+请给具体文件级反馈，不要只给泛泛建议。
+```
+
+通用收尾话术：
+
+```text
+请总结今天的 RAG 进展。
+包括：
+1. 实现了什么
+2. 我应该重点阅读哪些文件
+3. 哪些测试通过了
+4. 还剩什么风险
+5. 明天应该从哪里开始
+```
+
+每天复盘问题：
+
+- 今天构建了 RAG 链路的哪一环？
+- 有什么证据证明它能工作？
+- 如果放到企业环境，最先可能坏在哪里？
+- 我能不能不看代码讲清楚这个模块？
+- 我能不能指出答案来自哪里？
+- 系统能不能安全地说“资料不足，无法回答”？
 
 ## 第 3 周：Agent + MCP 项目
 
