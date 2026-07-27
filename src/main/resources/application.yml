@@ -28,5 +28,7 @@ app:
     forecast-base-url: https://api.open-meteo.com/v1/forecast
   rag:
     sample-docs-path: docs/sample-docs
+    chunk-size: 500
+    chunk-overlap: 80
 
 kind: Application
