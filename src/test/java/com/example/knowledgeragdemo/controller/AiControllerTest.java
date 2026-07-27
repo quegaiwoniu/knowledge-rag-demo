@@ -22,7 +22,7 @@ class AiControllerTest {
         mockMvc.perform(get("/ai/ping").param("message", "hello"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.provider").value("zetatechs-openai-compatible"))
+                .andExpect(jsonPath("$.data.provider").value("longcat-openai-compatible"))
                 .andExpect(jsonPath("$.data.input").value("hello"))
                 .andExpect(jsonPath("$.data.output").value("stub-response: hello"));
     }

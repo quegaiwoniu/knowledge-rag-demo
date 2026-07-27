@@ -1,6 +1,14 @@
 spring:
   application:
     name: knowledge-rag-demo
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
   ai:
     model:
       chat: none
@@ -9,7 +17,7 @@ spring:
 
 app:
   ai:
-    provider: zetatechs-openai-compatible
+    provider: longcat-openai-compatible
     default-message: Hello from test
     summary-max-input-length: 1200
     use-stub-service: true

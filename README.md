@@ -99,15 +99,20 @@ spring:
     model:
       chat: openai
     openai:
-      base-url: https://api.zetatechs.com
+      base-url: https://api.longcat.chat/openai
       api-key: ${OPENAI_API_KEY:}
       chat:
         options:
-          model: gpt-4.1-mini
+          model: LongCat-2.0
+      embedding:
+        base-url: ${OPENAI_EMBEDDING_BASE_URL:https://ai.lazymo.qzz.io}
+        api-key: ${OPENAI_EMBEDDING_API_KEY:${OPENAI_API_KEY:}}
+        options:
+          model: text-embedding-3-small
 
 app:
   ai:
-    provider: zetatechs-openai-compatible
+    provider: longcat-openai-compatible
     default-message: Hello from knowledge-rag-demo
     summary-max-input-length: 1200
     use-stub-service: false
@@ -116,6 +121,8 @@ app:
 说明：
 - `use-stub-service: false` 表示运行时走真实模型
 - 真实密钥不要写进 `application.yml`，请通过环境变量 `OPENAI_API_KEY` 注入
+- 索引重建会调用 embedding 接口；如果聊天供应商不支持 `/v1/embeddings`，请通过 `OPENAI_EMBEDDING_BASE_URL` 和 `OPENAI_EMBEDDING_API_KEY` 单独配置支持 embedding 的 OpenAI 兼容供应商
+- 如果供应商页面显示的 API 端点是 `https://ai.lazymo.qzz.io/v1`，Spring AI 配置里要填根地址 `https://ai.lazymo.qzz.io`，不要带最后的 `/v1`
 - 测试目录下有单独的 `src/test/resources/application.yml`，用于让自动化测试稳定运行
 
 ### 在 IDEA 里配置 `OPENAI_API_KEY`
@@ -131,6 +138,7 @@ app:
 
 ```text
 OPENAI_API_KEY=你的真实key
+OPENAI_EMBEDDING_API_KEY=你的embedding供应商key
 ```
 
 5. 保存配置后，再从 IDEA 启动后端
@@ -144,18 +152,80 @@ spring:
   ai:
     openai:
       api-key: ${OPENAI_API_KEY:}
+      embedding:
+        api-key: ${OPENAI_EMBEDDING_API_KEY:${OPENAI_API_KEY:}}
 ```
 
 - 这表示程序启动时会优先读取环境变量 `OPENAI_API_KEY`
-- 如果这个变量没配，程序就拿不到真实 key
+- 重建索引时会优先读取环境变量 `OPENAI_EMBEDDING_API_KEY`；如果不配置，就回退使用 `OPENAI_API_KEY`
+- 如果这些变量没配，程序就拿不到真实 key
 - 不要把真实 key 再写回 `application.yml`
 
 如果你只是临时想在命令行里启动，也可以用 PowerShell 这样写：
 
 ```powershell
 $env:OPENAI_API_KEY="你的真实key"
+$env:OPENAI_EMBEDDING_API_KEY="你的embedding供应商key"
 mvn -s .mvn/settings.xml spring-boot:run
 ```
+
+## pgvector 向量库规则
+
+项目使用真实 PostgreSQL + pgvector 作为向量库，固定规则如下：
+
+- 数据库：`ragdb`
+- schema：`public`
+- 表名：`vector_store`
+- 向量维度：`1536`
+- 距离：`COSINE_DISTANCE`
+- 索引：`HNSW`
+- 重建策略：每次 `/rag/index/rebuild` 先清空 `public.vector_store`，再重新写入当前文档切片的 embedding
+
+Spring AI 会在后端启动时自动执行 pgvector 初始化：
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE TABLE IF NOT EXISTS public.vector_store (...);
+CREATE INDEX IF NOT EXISTS spring_ai_vector_index ...;
+```
+
+如果你已经有本地 PostgreSQL，请确认它支持 pgvector 扩展，并且连接参数与配置一致：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://${PGHOST:localhost}:${PGPORT:5432}/${PGDATABASE:ragdb}
+    username: ${PGUSER:rag}
+    password: ${PGPASSWORD:ragpass}
+```
+
+如果你没有安装 pgvector，可以用项目自带的 Docker Compose 启动一个：
+
+```powershell
+docker compose -f docker-compose.pgvector.yml up -d
+```
+
+这等价于你当前使用的命令：
+
+```powershell
+docker run -d `
+  --name pgvector `
+  -e POSTGRES_USER=rag `
+  -e POSTGRES_PASSWORD=ragpass `
+  -e POSTGRES_DB=ragdb `
+  -p 5432:5432 `
+  -v pgvector_data:/var/lib/postgresql/data `
+  pgvector/pgvector:pg17
+```
+
+启动后可用下面的 SQL 检查：
+
+```sql
+SELECT extname FROM pg_extension WHERE extname = 'vector';
+SELECT COUNT(*) FROM public.vector_store;
+```
+
+注意：请在数据库客户端里展开 `ragdb -> public -> 表`。如果你看的是 `postgres -> public`，那里为空是正常的，因为应用不会写入 `postgres` 数据库。表只会在后端成功启动并连接到 `ragdb` 后创建；数据只会在调用 `/rag/index/rebuild` 并且 embedding 成功后写入。
 
 ## 本地启动
 

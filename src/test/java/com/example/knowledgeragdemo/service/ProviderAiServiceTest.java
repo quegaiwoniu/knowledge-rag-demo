@@ -29,7 +29,7 @@ class ProviderAiServiceTest {
         ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
         ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
         AppAiProperties properties = new AppAiProperties(
-                "zetatechs-openai-compatible",
+                "longcat-openai-compatible",
                 "Hello from test",
                 1200,
                 false
