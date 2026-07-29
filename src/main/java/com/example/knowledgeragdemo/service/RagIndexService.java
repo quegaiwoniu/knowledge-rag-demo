@@ -1,12 +1,18 @@
 package com.example.knowledgeragdemo.service;
 
+import com.example.knowledgeragdemo.dto.RagAskRequest;
+import com.example.knowledgeragdemo.dto.RagAskResponse;
 import com.example.knowledgeragdemo.dto.RagChunk;
 import com.example.knowledgeragdemo.dto.RagChunksResponse;
 import com.example.knowledgeragdemo.dto.RagDocumentMetadata;
 import com.example.knowledgeragdemo.dto.RagIndexStatusResponse;
+import com.example.knowledgeragdemo.dto.RagSearchResponse;
+import com.example.knowledgeragdemo.dto.RagSearchResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -14,18 +20,12 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * RAG 索引编排服务。
- *
- * <p>Day 11 的核心职责：把 Day 9 的 ingestion 和 Day 10 的 chunking 编排起来，
- * 生成 embedding 并写入 pgvector，同时维护索引状态。</p>
- *
- * <p>当前实现是"全量重建"策略：每次 rebuild 都清空旧向量，重新写入。
- * 这样最简单可靠，后续可以优化为增量更新。</p>
  */
 @Service
 public class RagIndexService {
@@ -35,14 +35,12 @@ public class RagIndexService {
     private final RagIngestionService ragIngestionService;
     private final RagChunkService ragChunkService;
     private final VectorStore vectorStore;
+    private final EmbeddingModel embeddingModel;
     private final JdbcTemplate jdbcTemplate;
+    private final ChatClient chatClient;
     private final String vectorStoreSchemaName;
     private final String vectorStoreTableName;
 
-    /**
-     * 索引状态：当前内存中缓存的最近一次重建结果。
-     * 后续可以改为从 pgvector 实时查询，但 Day 11 先用内存简化。
-     */
     private volatile int documentCount = 0;
     private volatile int chunkCount = 0;
     private volatile int embeddedChunkCount = 0;
@@ -51,43 +49,30 @@ public class RagIndexService {
     public RagIndexService(RagIngestionService ragIngestionService,
                            RagChunkService ragChunkService,
                            VectorStore vectorStore,
+                           EmbeddingModel embeddingModel,
                            JdbcTemplate jdbcTemplate,
+                           ChatClient.Builder chatClientBuilder,
                            @Value("${spring.ai.vectorstore.pgvector.schema-name:public}") String vectorStoreSchemaName,
                            @Value("${spring.ai.vectorstore.pgvector.table-name:vector_store}") String vectorStoreTableName) {
         this.ragIngestionService = ragIngestionService;
         this.ragChunkService = ragChunkService;
         this.vectorStore = vectorStore;
+        this.embeddingModel = embeddingModel;
         this.jdbcTemplate = jdbcTemplate;
+        this.chatClient = chatClientBuilder.build();
         this.vectorStoreSchemaName = validateIdentifier(vectorStoreSchemaName, "schema-name");
         this.vectorStoreTableName = validateIdentifier(vectorStoreTableName, "table-name");
     }
 
-    /**
-     * 执行一次完整的索引重建。
-     *
-     * <p>流程：导入文档 → 切片 → 向量化 → 写入 pgvector。</p>
-     *
-     * @return 本次重建的统计信息
-     */
     public RagIndexStatusResponse rebuildIndex() {
         log.info("Starting RAG index rebuild...");
-
-        // Step 1: 导入文档
         List<RagDocumentMetadata> documents = ragIngestionService.ingest().getDocuments();
         log.info("Ingested {} documents", documents.size());
-
-        // Step 2: 切片
         RagChunksResponse chunksResponse = ragChunkService.listChunks();
         List<RagChunk> chunks = chunksResponse.getChunks();
         log.info("Generated {} chunks from {} documents", chunks.size(), documents.size());
-
-        // Step 3: 转换为 Spring AI Document 并向量化写入。
-        // 全量重建必须先清空旧向量，避免 pgvector 中残留已经删除或修改过的知识片段。
         clearVectorStore();
-
         List<Document> springAiDocuments = convertToDocuments(chunks);
-
-        // 分批写入，单次 API 请求不超过 10 条文本
         int batchSize = 10;
         int total = springAiDocuments.size();
         for (int i = 0; i < total; i += batchSize) {
@@ -96,37 +81,81 @@ public class RagIndexService {
             vectorStore.add(batch);
             log.info("Embedded batch {}/{} ({} chunks)", (i / batchSize + 1), (total + batchSize - 1) / batchSize, batch.size());
         }
-
         log.info("Successfully embedded and stored {} chunks", total);
-
-        // Step 4: 更新状态
         this.documentCount = documents.size();
         this.chunkCount = chunks.size();
         this.embeddedChunkCount = springAiDocuments.size();
         this.lastRebuildAt = LocalDateTime.now();
-
         return getStatus();
     }
 
-    /**
-     * 获取当前索引状态。
-     */
     public RagIndexStatusResponse getStatus() {
-        return new RagIndexStatusResponse(
-                documentCount,
-                chunkCount,
-                embeddedChunkCount,
-                lastRebuildAt,
-                lastRebuildAt != null
-        );
+        return new RagIndexStatusResponse(documentCount, chunkCount, embeddedChunkCount, lastRebuildAt, lastRebuildAt != null);
     }
 
-    /**
-     * 将内部 RagChunk 转换为 Spring AI 的 Document。
-     *
-     * <p>每个 chunk 的元数据都会保留在 Document 的 metadata 中，
-     * 这样后续检索命中时可以追溯来源。</p>
-     */
+    public RagSearchResponse search(String query, int topK) {
+        log.info("Searching for query: {}", query);
+        float[] embedding = embeddingModel.embed(query);
+        String embeddingStr = toPgVectorString(embedding);
+        String sql = "SELECT metadata, content, 1 - (embedding <=> ?::vector) AS similarity " +
+                     "FROM " + vectorStoreSchemaName + "." + vectorStoreTableName + " " +
+                     "ORDER BY embedding <=> ?::vector ASC LIMIT ?";
+        List<RagSearchResult> results = jdbcTemplate.query(sql, (rs, rowNum) -> {
+            String metadataStr = rs.getString("metadata");
+            Map<String, Object> metadata = parseMetadata(metadataStr);
+            double similarity = rs.getDouble("similarity");
+            return new RagSearchResult(
+                    metadata.get("docId") != null ? metadata.get("docId").toString() : null,
+                    metadata.get("fileName") != null ? metadata.get("fileName").toString() : null,
+                    metadata.get("title") != null ? metadata.get("title").toString() : null,
+                    metadata.get("sectionTitle") != null ? metadata.get("sectionTitle").toString() : null,
+                    metadata.get("chunkIndex") != null ? Integer.parseInt(metadata.get("chunkIndex").toString()) : 0,
+                    rs.getString("content"),
+                    similarity
+            );
+        }, embeddingStr, embeddingStr, topK);
+        return new RagSearchResponse(query, results);
+    }
+
+    public RagAskResponse ask(String query, int topK) {
+        log.info("Asking question: {}", query);
+        RagSearchResponse searchResponse = search(query, topK);
+        List<RagSearchResult> retrievedChunks = searchResponse.getResults();
+        RagAskResponse response = new RagAskResponse();
+        response.setRetrievedChunks(retrievedChunks);
+        response.setCitations(retrievedChunks);
+        if (retrievedChunks.isEmpty()) {
+            response.setEnoughContext(false);
+            response.setAnswer("抱歉，知识库中没有找到相关信息来回答您的问题。请尝试换一种方式提问，或者先导入更多文档。");
+            return response;
+        }
+        StringBuilder contextBuilder = new StringBuilder();
+        for (int i = 0; i < retrievedChunks.size(); i++) {
+            RagSearchResult chunk = retrievedChunks.get(i);
+            contextBuilder.append(String.format("【片段 %d】（来源：%s - %s）\n%s\n\n",
+                    i + 1, chunk.getFileName(), chunk.getSectionTitle(), chunk.getContent()));
+        }
+        String systemPrompt = """
+                你是一个企业知识库问答助手。
+                请严格根据以下检索到的文档片段回答用户的问题。
+                规则：
+                1. 只使用提供的文档片段中的信息来回答
+                2. 如果文档片段不足以回答问题，请明确说明"根据现有知识库，无法完整回答此问题"
+                3. 回答要简洁、准确，使用中文
+                4. 不要编造文档中不存在的信息
+                5. 不要输出 markdown 格式
+                6. 在回答末尾用【引用】标注信息来源的文件名和章节
+                """;
+        String answer = chatClient.prompt()
+                .system(systemPrompt)
+                .user(String.format("问题：%s\n\n检索到的文档片段：\n%s", query, contextBuilder.toString()))
+                .call()
+                .content();
+        response.setEnoughContext(true);
+        response.setAnswer(answer);
+        return response;
+    }
+
     private List<Document> convertToDocuments(List<RagChunk> chunks) {
         List<Document> documents = new ArrayList<>(chunks.size());
         for (RagChunk chunk : chunks) {
@@ -137,7 +166,6 @@ public class RagIndexService {
             metadata.put("title", chunk.getTitle());
             metadata.put("sectionTitle", chunk.getSectionTitle());
             metadata.put("chunkIndex", chunk.getChunkIndex());
-
             documents.add(new Document(chunk.getContent(), metadata));
         }
         return documents;
@@ -152,5 +180,26 @@ public class RagIndexService {
             throw new IllegalArgumentException("Invalid pgvector " + propertyName + ": " + identifier);
         }
         return identifier;
+    }
+
+    private String toPgVectorString(float[] embedding) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < embedding.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(embedding[i]);
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    private Map<String, Object> parseMetadata(String metadataStr) {
+        if (metadataStr == null || metadataStr.isEmpty()) return new HashMap<>();
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(metadataStr, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("Failed to parse metadata JSON: {}", metadataStr, e);
+            return new HashMap<>();
+        }
     }
 }
