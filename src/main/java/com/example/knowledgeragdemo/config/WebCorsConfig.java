@@ -17,12 +17,13 @@ public class WebCorsConfig implements WebMvcConfigurer {
     /**
      * 允许前端开发服务器访问当前后端接口。
      *
-     * <p>这里只放开本地开发常见地址，避免把规则写得过宽。</p>
+     * <p>只允许本机开发地址，但不绑定 Vite 的具体端口，避免端口占用时
+     * 前端切换端口后被浏览器拦截。</p>
      */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOrigins("http://127.0.0.1:5173", "http://localhost:5173")
+                .allowedOriginPatterns("http://127.0.0.1:*", "http://localhost:*")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
     }
