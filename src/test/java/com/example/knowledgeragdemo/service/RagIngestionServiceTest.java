@@ -19,7 +19,7 @@ class RagIngestionServiceTest {
     @Test
     void ingestFailsWhenSampleDocsDirectoryDoesNotExist() {
         Path missingDirectory = tempDir.resolve("missing-docs");
-        RagIngestionService service = new RagIngestionService(new AppRagProperties(missingDirectory.toString(), 500, 80));
+        RagIngestionService service = new RagIngestionService(new AppRagProperties(missingDirectory.toString(), 500, 80, 0.5));
 
         assertThatThrownBy(service::ingest)
                 .isInstanceOf(IllegalStateException.class)
@@ -45,7 +45,7 @@ class RagIngestionServiceTest {
                 这是一份内容完全相同的测试文档。
                 """);
 
-        RagIngestionService service = new RagIngestionService(new AppRagProperties(docsDirectory.toString(), 500, 80));
+        RagIngestionService service = new RagIngestionService(new AppRagProperties(docsDirectory.toString(), 500, 80, 0.5));
 
         RagIngestResponse response = service.ingest();
 
@@ -68,7 +68,7 @@ class RagIngestionServiceTest {
                 这是一份用于模拟从父级工作区启动后端的文档。
                 """);
 
-        RagIngestionService service = new RagIngestionService(new AppRagProperties("docs/sample-docs", 500, 80)) {
+        RagIngestionService service = new RagIngestionService(new AppRagProperties("docs/sample-docs", 500, 80, 0.5)) {
             @Override
             protected Path getWorkingDirectory() {
                 return workspaceDirectory;

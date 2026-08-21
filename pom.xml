@@ -22,6 +22,8 @@
         <spring-ai.version>1.0.0</spring-ai.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <!-- 构建输出目录，默认 target；沙箱/受限环境下可用 -Dmaven.build.dir=xxx 覆盖 -->
+        <maven.build.dir>target</maven.build.dir>
     </properties>
 
     <dependencyManagement>
@@ -80,6 +82,7 @@
     </dependencies>
 
     <build>
+        <directory>${maven.build.dir}</directory>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

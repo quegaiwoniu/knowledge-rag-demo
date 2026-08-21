@@ -2,6 +2,7 @@
 .m2/
 logs/
 target/
+target-*/
 *.iml
 .env
 .env.*

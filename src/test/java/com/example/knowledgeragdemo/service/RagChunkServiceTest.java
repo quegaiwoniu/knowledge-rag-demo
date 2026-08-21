@@ -91,7 +91,7 @@ class RagChunkServiceTest {
     }
 
     private RagChunkService createChunkService(Path docsDirectory, int chunkSize, int chunkOverlap) {
-        AppRagProperties properties = new AppRagProperties(docsDirectory.toString(), chunkSize, chunkOverlap);
+        AppRagProperties properties = new AppRagProperties(docsDirectory.toString(), chunkSize, chunkOverlap, 0.5);
         RagIngestionService ingestionService = new RagIngestionService(properties);
         ingestionService.ingest();
         return new RagChunkService(properties, ingestionService);

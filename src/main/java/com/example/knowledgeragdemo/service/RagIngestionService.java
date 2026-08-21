@@ -3,6 +3,9 @@ package com.example.knowledgeragdemo.service;
 import com.example.knowledgeragdemo.config.AppRagProperties;
 import com.example.knowledgeragdemo.dto.RagDocumentMetadata;
 import com.example.knowledgeragdemo.dto.RagIngestResponse;
+import com.example.knowledgeragdemo.filter.TraceIdContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -30,6 +33,8 @@ import java.util.stream.Stream;
 @Service
 public class RagIngestionService {
 
+    private static final Logger log = LoggerFactory.getLogger(RagIngestionService.class);
+
     private final AppRagProperties ragProperties;
 
     /**
@@ -51,6 +56,10 @@ public class RagIngestionService {
      * 这样每次调用 POST /rag/ingest 都可以理解为“刷新一次样例知识库”。</p>
      */
     public RagIngestResponse ingest() {
+        String traceId = TraceIdContext.get();
+        long start = System.currentTimeMillis();
+        log.info("[{}] ingest start", traceId);
+
         Path sampleDocsDirectory = resolveSampleDocsDirectory();
         if (!Files.exists(sampleDocsDirectory) || !Files.isDirectory(sampleDocsDirectory)) {
             throw new IllegalStateException("sample docs directory does not exist: " + sampleDocsDirectory);

@@ -32,6 +32,7 @@ class ProviderAiServiceTest {
                 "longcat-openai-compatible",
                 "Hello from test",
                 1200,
+                false,
                 false
         );
 
@@ -55,7 +56,7 @@ class ProviderAiServiceTest {
         ChatClient chatClient = mock(ChatClient.class);
         ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
         ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
-        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false);
+        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false, false);
 
         WeatherToolService weatherToolService = createWeatherToolService();
 
@@ -85,7 +86,7 @@ class ProviderAiServiceTest {
         ChatClient chatClient = mock(ChatClient.class);
         ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
         ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
-        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false);
+        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false, false);
 
         WeatherToolService weatherToolService = createWeatherToolService();
 
@@ -113,7 +114,7 @@ class ProviderAiServiceTest {
         ChatClient chatClient = mock(ChatClient.class);
         ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
         ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
-        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false);
+        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false, false);
 
         WeatherToolService weatherToolService = createWeatherToolService();
 
@@ -141,7 +142,7 @@ class ProviderAiServiceTest {
         ChatClient chatClient = mock(ChatClient.class);
         ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
         ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
-        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false);
+        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false, false);
 
         WeatherToolService weatherToolService = createWeatherToolService();
 
@@ -176,7 +177,7 @@ class ProviderAiServiceTest {
         ChatClient chatClient = mock(ChatClient.class);
         ChatClient.ChatClientRequestSpec requestSpec = mock(ChatClient.ChatClientRequestSpec.class);
         ChatClient.CallResponseSpec responseSpec = mock(ChatClient.CallResponseSpec.class);
-        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false);
+        AppAiProperties properties = new AppAiProperties("provider", "hello", 1200, false, false);
 
         WeatherToolService weatherToolService = createWeatherToolService();
 

@@ -1,4 +1,4 @@
-﻿spring:
+spring:
   application:
     name: knowledge-rag-demo
   datasource:
@@ -9,11 +9,11 @@
     model:
       chat: openai
     openai:
-      base-url: https://api.longcat.chat/openai
+      base-url: https://api.zetatechs.com
       api-key: ${OPENAI_API_KEY:}
       chat:
         options:
-          model: LongCat-2.0
+          model: doubao-1-5-lite-32k-250115
       embedding:
         # The provider UI may show an endpoint ending with /v1, but Spring AI
         # appends /v1/embeddings itself, so configure the root URL here.
@@ -33,12 +33,19 @@
 server:
   port: 8080
 
+logging:
+  pattern:
+    # 让所有日志行自动附加当前请求的 traceId（来自 MDC）
+    level: "%5p [traceId=%X{traceId:-no-trace}]"
+
 app:
   ai:
     provider: longcat-openai-compatible
     default-message: Hello from knowledge-rag-demo
     summary-max-input-length: 1200
     use-stub-service: false
+    # 开启后 /rag/ask 会额外返回最终发给模型的完整 prompt，方便排查 prompt 质量
+    prompt-debug: false
   weather:
     use-mock-provider: true
     geocoding-base-url: https://geocoding-api.open-meteo.com/v1/search
@@ -47,5 +54,7 @@ app:
     sample-docs-path: docs/sample-docs
     chunk-size: 500
     chunk-overlap: 80
+    # 检索相似度低于该阈值的 chunk 会被过滤，不送入问答 prompt
+    min-score-threshold: 0.5
 
 kind: Application
