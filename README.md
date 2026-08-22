@@ -8,14 +8,23 @@
 - 统一响应体设计
 - 真实模型调用与 stub 测试隔离
 
-这个项目当前定位是 **RAG 后端骨架的第一步**。  
-我们先把最小可运行链路跑通，后面再继续补 `/rag/search`、`/rag/ask`、向量检索等能力。
+这个项目当前已经完成 **最小 RAG 后端闭环**：
+文档导入 → Markdown 切片 → embedding → pgvector 检索 → grounded QA → 引用与拒答。
 
 ## 当前功能
 
 - `GET /health`
 - `GET /ai/ping?message=...`
 - `POST /ai/summary`
+- `POST /ai/classify`
+- `POST /ai/extract`
+- `POST /ai/tool-call`
+- `POST /rag/ingest`
+- `GET /rag/chunks`
+- `POST /rag/index/rebuild`
+- `GET /rag/index/status`
+- `GET /rag/index/search`
+- `POST /rag/ask`
 - 统一响应体：`ApiResponse<T>`
 - `application.yml` 管理模型参数
 - 测试环境使用 stub，运行环境使用真实模型
@@ -258,14 +267,22 @@ mvn -s .mvn/settings.xml spring-boot:run
 - 不依赖外部网络波动
 - 不让模型输出波动影响单测结果
 
-## 下一步建议
+## 当前阶段与下一步
 
-这个仓库后面最适合继续补这些能力：
+当前 RAG 阶段已经完成：
 
-1. `/rag/search` 骨架
-2. `/rag/ask` 骨架
-3. 文档导入与切片
-4. 向量检索
-5. 引用来源返回
-6. 拒答机制
+- 文档导入与重复检测
+- Markdown 章节感知切片
+- pgvector 向量索引重建
+- 相似度阈值过滤
+- 基于证据的问答
+- 引用来源与召回片段返回
+- 无结果/低相似度拒答
+- Trace ID、耗时日志和 Prompt 调试开关
 
+下一步建议：
+
+1. 建立固定的 RAG 评测集
+2. 记录召回准确率、拒答准确率和引用正确率
+3. 完成 Tool Calling / MCP Agent 项目
+4. 补充生产环境异常处理、认证和持久化任务状态
